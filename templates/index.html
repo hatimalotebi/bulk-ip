@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk IPs Check</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: white;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        h1 {
+            margin-top: 20px;
+        }
+        form {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+        input[type="file"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            resize: none;
+            height: 80px;
+        }
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .button-group input[type="submit"],
+        .button-group input[type="button"] {
+            width: 48%;
+            padding: 10px;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .button-group input[type="submit"]:hover,
+        .button-group input[type="button"]:hover {
+            background-color: #0056b3;
+        }
+        #results {
+            width: 100%;
+            max-width: 900px;
+            margin-top: 30px;
+        }
+        #resultSummary {
+            margin-bottom: 20px;
+        }
+        .export-button {
+            padding: 10px 20px;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .export-button:hover {
+            background-color: #0056b3;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        #progress {
+            display: none;
+            width: 100%;
+            max-width: 900px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #007bff;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+</head>
+<body>
+    <h1>Bulk IPs Check</h1>
+    <form id="ipForm">
+        <div class="form-group">
+            <label for="input_csv">Input CSV:</label>
+            <input type="file" id="input_csv" name="input_csv">
+        </div>
+        <div class="form-group">
+            <label for="input_text">Or paste IPs here:</label>
+            <textarea id="input_text" name="input_text"></textarea>
+        </div>
+        <div class="button-group">
+            <input type="submit" value="Submit">
+            <input type="button" value="Append IPs" id="appendIPs">
+        </div>
+    </form>
+
+    <!-- Progress Indicator -->
+    <div id="progress">
+        <div class="spinner"></div>
+        <p>Processing, please wait...</p>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results">
+        <h2 id="resultTitle">Threat Activity Detected (0)</h2>
+        
+        <!-- Query Section -->
+        <div id="querySection" style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff;">
+            <h3 style="margin-top: 0; color: #007bff;">Splunk Queries</h3>
+            <div style="margin-bottom: 15px;">
+                <strong>Query 1:</strong>
+                <div style="background-color: #e9ecef; padding: 10px; border-radius: 3px; font-family: monospace; margin-top: 5px; word-break: break-all;">
+                    <span id="query1">index=* | stats count by index</span>
+                </div>
+            </div>
+            <div>
+                <strong>Query 2:</strong>
+                <div style="background-color: #e9ecef; padding: 10px; border-radius: 3px; font-family: monospace; margin-top: 5px; word-break: break-all;">
+                    <span id="query2">index=firewall | stats count by _time index dvc host src_ip dest_ip dest_port app action bytes_in bytes_out vendor_action vendor_product</span>
+                </div>
+            </div>
+        </div>
+        
+        <p id="resultSummary"></p>
+        <button class="export-button" onclick="exportTableToCsv('output.csv')">Export as CSV</button>
+        <table id="resultsTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>IP Address</th>
+                    <th>Abuse Confidence Score</th>
+                    <th>ISP</th>
+                    <th>Domain</th>
+                    <th>Country Code</th>
+                    <th>Total Reports</th>
+                    <th>Last Reported At</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Filled dynamically by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            // Initialize DataTable with default search bar
+            var table = $('#resultsTable').DataTable({
+                "paging": false, // Disable pagination
+            });
+    
+            function submitForm(append = false) {
+                var formData = new FormData($('#ipForm')[0]);
+                
+                // Show progress indicator
+                $('#progress').show();
+    
+                $.ajax({
+                    url: '/',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    success: function (response) {
+                        // Hide progress indicator
+                        $('#progress').hide();
+    
+                        // Show results section
+                        $('#results').show();
+    
+                        // Update result summary
+                        $('#resultSummary').html(`
+                            Started check of ${response.total_rows} IPs<br>
+                            Completed check in ${response.elapsed_minutes} minutes and ${response.elapsed_seconds} seconds<br>
+                            Average time per IP checked was ${response.avg_time_per_ip} seconds
+                        `);
+    
+                        if (!append) {
+                            table.clear(); // Clear the table if not appending
+                        }
+    
+                        // Get current row count for ID numbering
+                        var currentRowCount = table.rows().count();
+                        
+                        // Populate the table with results
+                        $.each(response.output_data, function (index, data) {
+                            table.row.add([
+                                currentRowCount + index + 1, // ID number starting from current count + 1
+                                data.ipAddress,
+                                data.abuseConfidenceScore,
+                                data.isp,
+                                data.domain,
+                                data.countryCode,
+                                data.totalReports,
+                                data.lastReportedAt,
+                                `<a href="https://www.abuseipdb.com/check/${data.ipAddress}" target="_blank">Check IP</a>`
+                            ]).draw(false);
+                        });
+                        
+                        // Update the title with total IP count
+                        var totalIPs = table.rows().count();
+                        $('#resultTitle').text(`Threat Activity Detected (${totalIPs})`);
+                        
+                        // Update Splunk queries with IP addresses
+                        updateSplunkQueries();
+                    },
+                    error: function (xhr, status, error) {
+                        // Hide progress indicator
+                        $('#progress').hide();
+    
+                        alert('An error occurred: ' + xhr.responseText);
+                    }
+                });
+            }
+    
+            // Handle submit button
+            $('#ipForm').on('submit', function (e) {
+                e.preventDefault();
+                submitForm(false);  // Standard submission clears the table first
+            });
+    
+            // Handle append IPs button
+            $('#appendIPs').on('click', function () {
+                submitForm(true);  // Append new IPs to the existing table
+            });
+        });
+    
+        // Function to export table data to CSV
+        function exportTableToCsv(filename) {
+            var rows = [];
+            var headers = [];
+            // Only select the first 8 columns, excluding the "AbuseIPDB Link" column
+            document.querySelectorAll("table th").forEach(function (th, index) {
+                if (index < 8) {
+                    headers.push(th.innerText);
+                }
+            });
+            rows.push(headers);
+    
+            // Iterate through the rows and exclude the last column (Check IP link)
+            document.querySelectorAll("table tbody tr").forEach(function (tr) {
+                var row = [];
+                tr.querySelectorAll("td").forEach(function (td, index) {
+                    if (index < 8) {
+                        row.push(td.innerText);
+                    }
+                });
+                rows.push(row);
+            });
+    
+            exportToCsv(filename, rows);
+        }
+    
+        function exportToCsv(filename, rows) {
+            var processRow = function (row) {
+                var finalVal = '';
+                for (var j = 0; j < row.length; j++) {
+                    var innerValue = row[j] === null ? '' : row[j].toString();
+                    if (row[j] instanceof Date) {
+                        innerValue = row[j].toLocaleString();
+                    }
+                    var result = innerValue.replace(/"/g, '""');
+                    if (result.search(/("|,|\n)/g) >= 0)
+                        result = '"' + result + '"';
+                    if (j > 0)
+                        finalVal += ',';
+                    finalVal += result;
+                }
+                return finalVal + '\n';
+            };
+
+            var csvFile = '';
+            for (var i = 0; i < rows.length; i++) {
+                csvFile += processRow(rows[i]);
+            }
+
+            var blob = new Blob([csvFile], { type: 'text/csv;charset=utf-8;' });
+            if (navigator.msSaveBlob) { // IE 10+
+                navigator.msSaveBlob(blob, filename);
+            } else {
+                var link = document.createElement("a");
+                if (link.download !== undefined) { // feature detection
+                    var url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", filename);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            }
+        }
+
+        // Function to update Splunk queries with current IP addresses
+        function updateSplunkQueries() {
+            var ipAddresses = [];
+            
+            // Collect all IP addresses from the table (column index 1 is IP Address)
+            $('#resultsTable tbody tr').each(function() {
+                var ip = $(this).find('td:eq(1)').text(); // Get IP from second column (index 1)
+                if (ip && ip.trim() !== '') {
+                    ipAddresses.push('"' + ip + '"');
+                }
+            });
+            
+            if (ipAddresses.length > 0) {
+                var ipQuery = ipAddresses.join(' OR ');
+                
+                // Update Query 1
+                var query1 = 'index=* ' + ipQuery + ' | stats count by index';
+                $('#query1').text(query1);
+                
+                // Update Query 2
+                var query2 = 'index=firewall ' + ipQuery + ' | stats count by _time index dvc host src_ip dest_ip dest_port app action bytes_in bytes_out vendor_action vendor_product';
+                $('#query2').text(query2);
+            }
+        }
+    </script>
+    
+    
+</body>
+</html>

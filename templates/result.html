@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Result</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        .export-button {
+            margin-bottom: 10px;
+            padding: 10px 20px;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .export-button:hover {
+            background-color: #0056b3;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+    <script>
+        function exportToCsv(filename, rows) {
+            var processRow = function (row) {
+                var finalVal = '';
+                for (var j = 0; j < row.length; j++) {
+                    var innerValue = row[j] === null ? '' : row[j].toString();
+                    if (row[j] instanceof Date) {
+                        innerValue = row[j].toLocaleString();
+                    }
+                    var result = innerValue.replace(/"/g, '""');
+                    if (result.search(/("|,|\n)/g) >= 0)
+                        result = '"' + result + '"';
+                    if (j > 0)
+                        finalVal += ',';
+                    finalVal += result;
+                }
+                return finalVal + '\n';
+            };
+
+            var csvFile = '';
+            for (var i = 0; i < rows.length; i++) {
+                csvFile += processRow(rows[i]);
+            }
+
+            var blob = new Blob([csvFile], { type: 'text/csv;charset=utf-8;' });
+            if (navigator.msSaveBlob) { // IE 10+
+                navigator.msSaveBlob(blob, filename);
+            } else {
+                var link = document.createElement("a");
+                if (link.download !== undefined) { // feature detection
+                    var url = URL.createObjectURL(blob);
+                    link.setAttribute("href", url);
+                    link.setAttribute("download", filename);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            }
+        }
+
+        function exportTableToCsv(filename) {
+            var rows = [];
+            var headers = [];
+            document.querySelectorAll("table th").forEach(function (th) {
+                headers.push(th.innerText);
+            });
+            rows.push(headers);
+
+            document.querySelectorAll("table tr").forEach(function (tr) {
+                var row = [];
+                tr.querySelectorAll("td").forEach(function (td) {
+                    row.push(td.innerText);
+                });
+                rows.push(row);
+            });
+
+            exportToCsv(filename, rows);
+        }
+    </script>
+</head>
+<body>
+    <h1>Result</h1>
+    {% if result.error %}
+        <p>{{ result.error }}</p>
+    {% else %}
+        <p>Started check of {{ result.total_rows }} IPs<br>
+        Completed check in {{ result.elapsed_minutes }} minutes and {{ result.elapsed_seconds }} seconds<br>
+        Average time per IP checked was {{ result.avg_time_per_ip }} seconds</p>
+        <button class="export-button" onclick="exportTableToCsv('output.csv')">Export as CSV</button>
+        <h2>Output Data</h2>
+        <table>
+            <tr>
+                <th>IP Address</th>
+                <th>Abuse Confidence Score</th>
+                <th>ISP</th>
+                <th>Domain</th>
+                <th>Country Code</th>
+                <th>Total Reports</th>
+                <th>Last Reported At</th>
+            </tr>
+            {% for data in result.output_data %}
+                <tr>
+                    <td>{{ data.ipAddress }}</td>
+                    <td>{{ data.abuseConfidenceScore }}</td>
+                    <td>{{ data.isp }}</td>
+                    <td>{{ data.domain }}</td>
+                    <td>{{ data.countryCode }}</td>
+                    <td>{{ data.totalReports }}</td>
+                    <td>{{ data.lastReportedAt }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
+</body>
+</html>
