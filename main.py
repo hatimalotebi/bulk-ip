@@ -10,23 +10,12 @@ import threading
 import queue
 import os
 from flask import Flask, render_template, request, jsonify
-from dotenv import load_dotenv
 
 
 app = Flask(__name__)
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Get API key from environment variable
-api_key = os.getenv('ABUSEIPDB_API_KEY')
-
-# Check if API key is provided
-if not api_key:
-    print("❌ Error: ABUSEIPDB_API_KEY not found in .env file!")
-    print("Please add your AbuseIPDB API key to the .env file:")
-    print("ABUSEIPDB_API_KEY=your_api_key_here")
-    exit(1)
+# API key for AbuseIPDB
+api_key = "afff296b18e8be5f55036f9910acb04749ea415b10952bef60bd2fe4adff8fe3722bc5de3f8eddcc"
 
 DB_PATH = 'ip_cache.db'
 
