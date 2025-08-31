@@ -6,7 +6,8 @@
     <title>Bulk IPs Check</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: Calibri, Arial, sans-serif;
+            font-size: 11pt;
             background-color: white;
             margin: 0;
             padding: 0;
@@ -79,14 +80,31 @@
         .export-button {
             padding: 10px 20px;
             color: white;
-            background-color: #007bff;
+            background-color: #007987;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             margin-bottom: 20px;
         }
         .export-button:hover {
-            background-color: #0056b3;
+            background-color: #006a74;
+        }
+        .export-message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .export-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .export-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
         }
         table {
             border-collapse: collapse;
@@ -94,15 +112,32 @@
             box-sizing: border-box;
         }
         th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
+            border: 1px solid #B2B2B2;
+            padding: 6px;
             text-align: center;
+            font-family: Calibri, Arial, sans-serif;
+            font-size: 11pt;
         }
         th {
-            background-color: #f2f2f2;
+            background-color: #007987;
+            color: black;
+            font-weight: bold;
+            text-align: center;
         }
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
+        tr {
+            background-color: #C9FFFF;
+        }
+        
+        /* Override DataTables styling to ensure black headers */
+        .dataTables_wrapper .dataTable thead th {
+            background-color: #007987;
+            color: black;
+            font-weight: bold;
+        }
+        
+        /* Force black text in all table headers */
+        table th, .dataTable th {
+            color: black;
         }
         #progress {
             display: none;
@@ -127,6 +162,7 @@
     <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/jquery.dataTables.min.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 </head>
 <body>
     <h1>Bulk IPs Check</h1>
@@ -170,10 +206,24 @@
                     <span id="query2">index=firewall | stats count by _time index dvc host src_ip dest_ip dest_port app action bytes_in bytes_out vendor_action vendor_product</span>
                 </div>
             </div>
+            <div style="margin-top: 15px;">
+                <strong>Query 3 (Nupco WAF):</strong>
+                <div style="background-color: #e9ecef; padding: 10px; border-radius: 3px; font-family: monospace; margin-top: 5px; word-break: break-all;">
+                    <span id="query3"></span>
+                </div>
+            </div>
         </div>
         
         <p id="resultSummary"></p>
-        <button class="export-button" onclick="exportTableToCsv('output.csv')">Export as CSV</button>
+        <div id="nupcoQueries" style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff; display: none;">
+            <h3 style="margin-top: 0; color: #007bff;">Nupco WAF Query</h3>
+            <ul id="nupcoQueriesList" style="list-style: none; padding-left: 0;"></ul>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap: wrap;">
+            <button class="export-button" onclick="exportTableToCsv()" title="Export data as CSV file with timestamp">Export as CSV</button>
+            <button class="export-button" id="exportExcelStyled" title="Export as Excel file with colors and formatting">Export Excel (.xlsx)</button>
+            <button class="export-button" id="copyStyled" title="Copy formatted table to clipboard for Excel pasting">Copy for Excel</button>
+        </div>
         <table id="resultsTable">
             <thead>
                 <tr>
@@ -254,6 +304,9 @@
                         
                         // Update Splunk queries with IP addresses
                         updateSplunkQueries();
+                        // Generate Nupco query and mirror into Query 3
+                        renderNupcoQueries();
+                        updateNupcoQuery3();
                     },
                     error: function (xhr, status, error) {
                         // Hide progress indicator
@@ -278,6 +331,24 @@
     
         // Function to export table data to CSV
         function exportTableToCsv(filename) {
+            // Check if table has data
+            var rowCount = $('#resultsTable tbody tr').length;
+            if (rowCount === 0) {
+                alert('No data to export. Please run a search first.');
+                return;
+            }
+
+            // Add timestamp to filename if not provided
+            if (!filename) {
+                var now = new Date();
+                var timestamp = now.getFullYear() + '-' + 
+                               String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                               String(now.getDate()).padStart(2, '0') + '_' +
+                               String(now.getHours()).padStart(2, '0') + '-' + 
+                               String(now.getMinutes()).padStart(2, '0');
+                filename = 'bulk_ip_check_' + timestamp + '.csv';
+            }
+
             var rows = [];
             var headers = [];
             // Only select the first 8 columns, excluding the "AbuseIPDB Link" column
@@ -287,7 +358,7 @@
                 }
             });
             rows.push(headers);
-    
+
             // Iterate through the rows and exclude the last column (Check IP link)
             document.querySelectorAll("table tbody tr").forEach(function (tr) {
                 var row = [];
@@ -298,47 +369,53 @@
                 });
                 rows.push(row);
             });
-    
+
             exportToCsv(filename, rows);
         }
-    
+
         function exportToCsv(filename, rows) {
-            var processRow = function (row) {
-                var finalVal = '';
-                for (var j = 0; j < row.length; j++) {
-                    var innerValue = row[j] === null ? '' : row[j].toString();
-                    if (row[j] instanceof Date) {
-                        innerValue = row[j].toLocaleString();
+            try {
+                var processRow = function (row) {
+                    var finalVal = '';
+                    for (var j = 0; j < row.length; j++) {
+                        var innerValue = row[j] === null ? '' : row[j].toString();
+                        if (row[j] instanceof Date) {
+                            innerValue = row[j].toLocaleString();
+                        }
+                        var result = innerValue.replace(/"/g, '""');
+                        if (result.search(/("|,|\n)/g) >= 0)
+                            result = '"' + result + '"';
+                        if (j > 0)
+                            finalVal += ',';
+                        finalVal += result;
                     }
-                    var result = innerValue.replace(/"/g, '""');
-                    if (result.search(/("|,|\n)/g) >= 0)
-                        result = '"' + result + '"';
-                    if (j > 0)
-                        finalVal += ',';
-                    finalVal += result;
-                }
-                return finalVal + '\n';
-            };
+                    return finalVal + '\n';
+                };
 
-            var csvFile = '';
-            for (var i = 0; i < rows.length; i++) {
-                csvFile += processRow(rows[i]);
-            }
-
-            var blob = new Blob([csvFile], { type: 'text/csv;charset=utf-8;' });
-            if (navigator.msSaveBlob) { // IE 10+
-                navigator.msSaveBlob(blob, filename);
-            } else {
-                var link = document.createElement("a");
-                if (link.download !== undefined) { // feature detection
-                    var url = URL.createObjectURL(blob);
-                    link.setAttribute("href", url);
-                    link.setAttribute("download", filename);
-                    link.style.visibility = 'hidden';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                var csvFile = '';
+                for (var i = 0; i < rows.length; i++) {
+                    csvFile += processRow(rows[i]);
                 }
+
+                var blob = new Blob([csvFile], { type: 'text/csv;charset=utf-8;' });
+                if (navigator.msSaveBlob) { // IE 10+
+                    navigator.msSaveBlob(blob, filename);
+                } else {
+                    var link = document.createElement("a");
+                    if (link.download !== undefined) { // feature detection
+                        var url = URL.createObjectURL(blob);
+                        link.setAttribute("href", url);
+                        link.setAttribute("download", filename);
+                        link.style.visibility = 'hidden';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        // Show success message
+                        showExportMessage('CSV exported successfully: ' + filename, 'success');
+                    }
+                }
+            } catch (error) {
+                showExportMessage('Export failed: ' + error.message, 'error');
             }
         }
 
@@ -366,6 +443,279 @@
                 $('#query2').text(query2);
             }
         }
+
+        // Render Nupco per-IP queries after scan
+        function renderNupcoQueries() {
+            var ips = [];
+            $('#resultsTable tbody tr').each(function() {
+                var ip = $(this).find('td:eq(1)').text();
+                if (ip && ip.trim() !== '') {
+                    ips.push(ip.trim());
+                }
+            });
+
+            var list = $('#nupcoQueriesList');
+            list.empty();
+
+            if (ips.length > 0) {
+                var clientClause = ips.map(function(ip) { return 'client_ip="' + ip + '"'; }).join(' OR ');
+                var query = 'index="waf" ' + clientClause + ' | iplocation client_ip | eval server_ip=replace(server_ip,"^10\\.95", "") | top msg limit=0 by client_ip Country server_name server_ip severity';
+                var li = $('<li style="margin: 6px 0; font-family: monospace; word-break: break-all;"></li>');
+                li.text(query);
+                list.append(li);
+            }
+
+            if (ips.length > 0) {
+                $('#nupcoQueries').show();
+            } else {
+                $('#nupcoQueries').hide();
+            }
+        }
+
+        // Mirror Nupco query into Splunk Query 3
+        function updateNupcoQuery3() {
+            var text = $('#nupcoQueriesList li').first().text();
+            $('#query3').text(text || '');
+        }
+
+        // Build styled HTML table for Excel export/copy
+        function buildStyledTableHtml() {
+            // Calculate column widths for auto-sizing (same as Excel export)
+            var headers = ['ID', 'IP Address', 'Abuse Confidence Score', 'ISP', 'Domain', 'Country Code', 'Total Reports', 'Last Reported At'];
+            var colWidths = [];
+            
+            // Calculate width for each column (same algorithm as Excel export)
+            for (var c = 0; c < headers.length; c++) {
+                var maxWidth = headers[c].length; // Start with header length
+                
+                $('#resultsTable tbody tr').each(function() {
+                    var tds = $(this).find('td');
+                    if (tds.length > c) {
+                        var cellValue = $(tds[c]).text();
+                        var cellLength = cellValue.length;
+                        
+                        // Account for special characters and formatting (same as Excel)
+                        if (cellValue.includes('@') || cellValue.includes('.')) {
+                            cellLength += 1;
+                        }
+                        
+                        // Add padding for better readability
+                        cellLength += 2;
+                        maxWidth = Math.max(maxWidth, cellLength);
+                    }
+                });
+                
+                // Set minimum and maximum bounds (same as Excel)
+                maxWidth = Math.max(8, Math.min(maxWidth, 50));
+                colWidths.push(maxWidth);
+            }
+
+            // Use your working CSS solution
+            var headerStyle = 'background-color:#007987;color:black;font-weight:bold;text-align:center;border:1px solid #B2B2B2;padding:6px;font-family:Calibri, Arial, sans-serif;font-size:11pt;';
+            var rowStyle = 'background-color:#C9FFFF;color:black;border:1px solid #B2B2B2;padding:6px;font-family:Calibri, Arial, sans-serif;font-size:11pt;text-align:center;';
+            var tableStyle = 'border-collapse:collapse;width:100%;font-family:Calibri, Arial, sans-serif;font-size:11pt;';
+
+            var html = '<table style="' + tableStyle + '"><thead><tr>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[0] * 10) + 'px;">ID</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[1] * 10) + 'px;">IP Address</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[2] * 10) + 'px;">Abuse Confidence Score</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[3] * 10) + 'px;">ISP</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[4] * 10) + 'px;">Domain</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[5] * 10) + 'px;">Country Code</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[6] * 10) + 'px;">Total Reports</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[7] * 10) + 'px;">Last Reported At</th>' +
+            '</tr></thead><tbody>';
+
+            $('#resultsTable tbody tr').each(function(i) {
+                var tds = $(this).find('td');
+                var idVal = $(tds[0]).text();
+                var ip = $(tds[1]).text();
+                var score = $(tds[2]).text();
+                var isp = $(tds[3]).text();
+                var domain = $(tds[4]).text();
+                var cc = $(tds[5]).text();
+                var reports = $(tds[6]).text();
+                var last = $(tds[7]).text();
+
+                html += '<tr>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[0] * 10) + 'px;mso-number-format:\'@\';">' + idVal + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[1] * 10) + 'px;">' + ip + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[2] * 10) + 'px;">' + score + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[3] * 10) + 'px;">' + isp + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[4] * 10) + 'px;">' + domain + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[5] * 10) + 'px;">' + cc + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[6] * 10) + 'px;">' + reports + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[7] * 10) + 'px;">' + last + '</td>' +
+                '</tr>';
+            });
+
+            html += '</tbody></table>';
+            return html;
+        }
+
+        // Export an HTML table as an .xlsx file with styles
+        function exportExcelStyled(filename) {
+            // Check if table has data
+            var rowCount = $('#resultsTable tbody tr').length;
+            if (rowCount === 0) {
+                alert('No data to export. Please run a search first.');
+                return;
+            }
+
+            // Add timestamp to filename if not provided
+            if (!filename) {
+                var now = new Date();
+                var timestamp = now.getFullYear() + '-' + 
+                               String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                               String(now.getDate()).padStart(2, '0') + '_' +
+                               String(now.getHours()).padStart(2, '0') + '-' + 
+                               String(now.getMinutes()).padStart(2, '0');
+                filename = 'bulk_ip_check_' + timestamp + '.xlsx';
+            }
+
+            try {
+                var wb = XLSX.utils.book_new();
+                var headers = ['ID','IP Address','Abuse Confidence Score','ISP','Domain','Country Code','Total Reports','Last Reported At'];
+                var rows = [];
+                $('#resultsTable tbody tr').each(function(i){
+                    var tds = $(this).find('td');
+                    rows.push([
+                        $(tds[0]).text(),
+                        $(tds[1]).text(),
+                        $(tds[2]).text(),
+                        $(tds[3]).text(),
+                        $(tds[4]).text(),
+                        $(tds[5]).text(),
+                        $(tds[6]).text(),
+                        $(tds[7]).text()
+                    ]);
+                });
+
+                var ws = XLSX.utils.aoa_to_sheet([headers].concat(rows));
+
+                // Calculate auto-width for each column based on content
+                var colWidths = [];
+                
+                // Calculate width for each column
+                for (var c = 0; c < headers.length; c++) {
+                    var maxWidth = headers[c].length; // Start with header length
+                    
+                    // Check all rows in this column
+                    for (var r = 0; r < rows.length; r++) {
+                        var cellValue = rows[r][c] ? rows[r][c].toString() : '';
+                        var cellLength = cellValue.length;
+                        
+                        // Account for special characters and formatting
+                        if (cellValue.includes('@') || cellValue.includes('.')) {
+                            cellLength += 1; // Add extra space for special characters
+                        }
+                        
+                        // Add padding for better readability
+                        cellLength += 2;
+                        maxWidth = Math.max(maxWidth, cellLength);
+                    }
+                    
+                    // Set minimum and maximum bounds (Excel column width units)
+                    maxWidth = Math.max(8, Math.min(maxWidth, 50));
+                    colWidths.push({ wch: maxWidth });
+                }
+                
+                // Apply auto-width columns
+                ws['!cols'] = colWidths;
+
+                // Style header with BLACK TEXT
+                for (var c = 0; c < headers.length; c++) {
+                    var cell = ws[XLSX.utils.encode_cell({ r: 0, c: c })];
+                    if (!cell) continue;
+                    cell.s = {
+                        font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
+                        alignment: { horizontal: 'center', vertical: 'center' },
+                        fill: { fgColor: { rgb: '007987' } },
+                        border: { top:{style:'thin',color:{rgb:'FFB2B2B2'}}, bottom:{style:'thin',color:{rgb:'FFB2B2B2'}}, left:{style:'thin',color:{rgb:'FFB2B2B2'}}, right:{style:'thin',color:{rgb:'FFB2B2B2'}} }
+                    };
+                }
+
+                // Style rows and force ID as text
+                for (var r = 1; r <= rows.length; r++) {
+                    for (var c2 = 0; c2 < headers.length; c2++) {
+                        var cell2 = ws[XLSX.utils.encode_cell({ r: r, c: c2 })];
+                        if (!cell2) continue;
+                        if (c2 === 0) cell2.t = 's'; // ID as string
+                        cell2.s = {
+                            font: { name: 'Calibri', sz: 11, color: { rgb: '000000' } },
+                            fill: { fgColor: { rgb: 'C9FFFF' } },
+                            border: { top:{style:'thin',color:{rgb:'FFB2B2B2'}}, bottom:{style:'thin',color:{rgb:'FFB2B2B2'}}, left:{style:'thin',color:{rgb:'FFB2B2B2'}}, right:{style:'thin',color:{rgb:'FFB2B2B2'}} }
+                        };
+                    }
+                }
+
+                XLSX.utils.book_append_sheet(wb, ws, 'Results');
+                XLSX.writeFile(wb, filename);
+                showExportMessage('Excel file exported successfully: ' + filename, 'success');
+            } catch (error) {
+                showExportMessage('Excel export failed: ' + error.message, 'error');
+            }
+        }
+
+        // Copy styled HTML table to clipboard (Excel preserves formatting on paste)
+        async function copyStyledToClipboard() {
+            // Check if table has data
+            var rowCount = $('#resultsTable tbody tr').length;
+            if (rowCount === 0) {
+                alert('No data to copy. Please run a search first.');
+                return;
+            }
+
+            var html = buildStyledTableHtml();
+            try {
+                if (navigator.clipboard && window.ClipboardItem) {
+                    var item = new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) });
+                    await navigator.clipboard.write([item]);
+                    showExportMessage('Styled table copied to clipboard! Paste into Excel to keep colors.', 'success');
+                } else {
+                    // Fallback for older browsers
+                    var div = document.createElement('div');
+                    div.contentEditable = true;
+                    div.style.position = 'fixed';
+                    div.style.left = '-9999px';
+                    div.innerHTML = html;
+                    document.body.appendChild(div);
+                    var range = document.createRange();
+                    range.selectNodeContents(div);
+                    var sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    document.execCommand('copy');
+                    document.body.removeChild(div);
+                    showExportMessage('Styled table copied to clipboard! Paste into Excel to keep colors.', 'success');
+                }
+            } catch (e) {
+                showExportMessage('Copy failed: ' + e.message, 'error');
+            }
+        }
+
+        // Show export status messages
+        function showExportMessage(message, type) {
+            // Remove existing message
+            $('.export-message').remove();
+            
+            var messageClass = type === 'success' ? 'export-success' : 'export-error';
+            var messageHtml = '<div class="export-message ' + messageClass + '">' + message + '</div>';
+            
+            // Insert message after export buttons
+            $('.export-button').first().after(messageHtml);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(function() {
+                $('.export-message').fadeOut(500, function() {
+                    $(this).remove();
+                });
+            }, 3000);
+        }
+
+        // Wire buttons
+        $('#exportExcelStyled').on('click', function() { exportExcelStyled(); });
+        $('#copyStyled').on('click', function() { copyStyledToClipboard(); });
     </script>
     
     

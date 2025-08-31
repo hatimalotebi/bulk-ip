@@ -4,12 +4,75 @@ import math
 import requests
 import ipaddress
 import re
+import sqlite3
+import json
+import threading
+import queue
+import os
 from flask import Flask, render_template, request, jsonify
+from dotenv import load_dotenv
 
 
 app = Flask(__name__)
 
-api_key = ""  # AbuseIPDB API key
+# Load environment variables from .env file
+load_dotenv()
+
+# Get API key from environment variable
+api_key = os.getenv('ABUSEIPDB_API_KEY')
+
+# Check if API key is provided
+if not api_key:
+    print("❌ Error: ABUSEIPDB_API_KEY not found in .env file!")
+    print("Please add your AbuseIPDB API key to the .env file:")
+    print("ABUSEIPDB_API_KEY=your_api_key_here")
+    exit(1)
+
+DB_PATH = 'ip_cache.db'
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            'CREATE TABLE IF NOT EXISTS ip_cache ('
+            ' ip TEXT PRIMARY KEY,'
+            ' data TEXT NOT NULL,'
+            ' updated_at REAL NOT NULL'
+            ')'
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_cached_ip(ip):
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.cursor()
+        cur.execute('SELECT data FROM ip_cache WHERE ip = ?', (ip,))
+        row = cur.fetchone()
+        if row:
+            try:
+                return json.loads(row[0])
+            except Exception:
+                return None
+        return None
+    finally:
+        conn.close()
+
+def set_cached_ip(ip, data):
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            'INSERT OR REPLACE INTO ip_cache (ip, data, updated_at) VALUES (?, ?, ?)',
+            (ip, json.dumps(data), time.time())
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+init_db()
 
 def is_valid_ip(ip):
     try:
@@ -49,16 +112,60 @@ def bulk_check(file=None, text=None, api_key=None):
 
         total_rows = len(external_ips)
 
-        for i, ip in enumerate(external_ips):
-            response = requests.get(
-                f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}",
-                headers={'Accept': 'application/json', 'Key': api_key}
-            )
-
-            if response.status_code == 200:
-                output_data.append(response.json()['data'])
+        # Separate cached vs to-fetch
+        to_fetch_ips = []
+        for ip in external_ips:
+            cached = get_cached_ip(ip)
+            if cached is not None:
+                output_data.append(cached)
             else:
-                output_data.append({'ipAddress': ip, 'error': 'Invalid IP'})
+                to_fetch_ips.append(ip)
+
+        # Determine worker count between 10 and 50 based on workload
+        num_workers = max(10, min(50, len(to_fetch_ips))) if len(to_fetch_ips) > 0 else 0
+
+        # Queues for tasks and results
+        task_queue = queue.Queue()
+        result_queue = queue.Queue()
+
+        for ip in to_fetch_ips:
+            task_queue.put(ip)
+
+        def worker():
+            while True:
+                try:
+                    ip = task_queue.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    response = requests.get(
+                        f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}",
+                        headers={'Accept': 'application/json', 'Key': api_key}
+                    )
+                    if response.status_code == 200:
+                        data = response.json()['data']
+                    else:
+                        data = {'ipAddress': ip, 'error': 'Invalid IP'}
+                    set_cached_ip(ip, data)
+                    result_queue.put(data)
+                except Exception as fetch_err:
+                    result_queue.put({'ipAddress': ip, 'error': f'Fetch error: {str(fetch_err)}'})
+                finally:
+                    task_queue.task_done()
+
+        threads = []
+        for _ in range(num_workers):
+            t = threading.Thread(target=worker, daemon=True)
+            t.start()
+            threads.append(t)
+
+        # Wait for all tasks to finish
+        if num_workers > 0:
+            task_queue.join()
+
+        # Drain results
+        while not result_queue.empty():
+            output_data.append(result_queue.get())
 
         end_time = time.time()
         elapsed_time = end_time - start_time
