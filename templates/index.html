@@ -139,6 +139,9 @@
         table th, .dataTable th {
             color: black;
         }
+        
+
+        
         #progress {
             display: none;
             width: 100%;
@@ -215,6 +218,74 @@
         </div>
         
         <p id="resultSummary"></p>
+        
+        <!-- Nupco WAF Query Section -->
+        <div id="nupcoQueries" style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff; display: none;">
+            <h3 style="margin-top: 0; color: #007bff;">Nupco WAF Query</h3>
+            <ul id="nupcoQueriesList" style="list-style: none; padding-left: 0;"></ul>
+        </div>
+        
+        <!-- Security Recommendations -->
+        <div id="securityRecommendations" style="margin: 20px 0; padding: 20px; background-color: #fff3cd; border-radius: 8px; border-left: 6px solid #ffc107; display: none;">
+            <h3 style="margin-top: 0; color: #856404; border-bottom: 2px solid #ffc107; padding-bottom: 10px;">🔒 Security Recommendations</h3>
+            <div style="color: #856404; font-size: 14px;">
+                <div style="margin-bottom: 15px; padding: 12px; background-color: #fff8e1; border-radius: 5px; border-left: 4px solid #ff9800;">
+                    <strong>1. IP Validation:</strong> Confirm if these IPs have a legitimate business use, otherwise block them immediately.
+                </div>
+                <div style="margin-bottom: 15px; padding: 12px; background-color: #fff8e1; border-radius: 5px; border-left: 4px solid #ff9800;">
+                    <strong>2. Port Security:</strong> Ensure the closure of unused ports to enhance the security posture of the system.
+                </div>
+                <div style="margin-bottom: 15px; padding: 12px; background-color: #fff8e1; border-radius: 5px; border-left: 4px solid #ff9800;">
+                    <strong>3. Access Control:</strong> If feasible, implement restrictions on server access for an added layer of security.
+                </div>
+            </div>
+        </div>
+        
+        <!-- Simple Recommendations for Email Copy -->
+        <div id="simpleRecommendations" style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px; display: none;">
+            <h3 style="margin-top: 0; color: #333;">📧 Security Recommendations (Copy for Email)</h3>
+            <div style="font-family: monospace; background-color: white; padding: 15px; border: 1px solid #ddd; border-radius: 3px;">
+                <strong>Key Security Actions Required:</strong><br>
+                1. Confirm if these IPs have legitimate business use, otherwise block immediately<br>
+                2. Ensure closure of unused ports to enhance security posture<br>
+                3. Implement server access restrictions for added security layer<br>
+                <br>
+                <strong>High Risk IPs (Score > 80):</strong><br>
+                These IPs have high abuse confidence scores and are not from major cloud providers. Immediate action is recommended.
+            </div>
+        </div>
+        
+        <!-- High Risk IPs Table -->
+        <div id="highRiskSection" style="margin: 20px 0; display: none;">
+            <h2 style="color: #dc3545; border-bottom: 3px solid #dc3545; padding-bottom: 10px;">🚨 High Risk IPs (Score > 80)</h2>
+            <p style="color: #6c757d; font-style: italic; margin-bottom: 15px;">These IPs have high abuse confidence scores and are not from major cloud providers. Immediate action is recommended.</p>
+            
+            <!-- Export Buttons for High Risk Table -->
+            <div style="display:flex; gap:10px; flex-wrap: wrap; margin-bottom: 15px;">
+                <button class="export-button" onclick="exportHighRiskTableToCsv()" title="Export high risk IPs as CSV file">Export High Risk as CSV</button>
+                <button class="export-button" onclick="exportHighRiskTableToExcel()" title="Export high risk IPs as Excel file">Export High Risk to Excel</button>
+                <button class="export-button" onclick="copyHighRiskTableForExcel()" title="Copy high risk IPs table for Excel pasting">Copy High Risk for Excel</button>
+            </div>
+            
+            <table id="highRiskTable" style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <thead>
+                    <tr style="background-color: #dc3545; color: white;">
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">ID</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">IP Address</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Abuse Score</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">ISP</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Country</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Total Reports</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Last Reported</th>
+                    </tr>
+                </thead>
+                <tbody id="highRiskTableBody">
+                    <!-- High risk IPs will be populated here -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Nupco WAF Query Section -->
         <div id="nupcoQueries" style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px; border-left: 4px solid #007bff; display: none;">
             <h3 style="margin-top: 0; color: #007bff;">Nupco WAF Query</h3>
             <ul id="nupcoQueriesList" style="list-style: none; padding-left: 0;"></ul>
@@ -266,24 +337,57 @@
                         // Hide progress indicator
                         $('#progress').hide();
     
-                        // Show results section
+                                                // Show results section
                         $('#results').show();
-    
+
                         // Update result summary
                         $('#resultSummary').html(`
                             Started check of ${response.total_rows} IPs<br>
                             Completed check in ${response.elapsed_minutes} minutes and ${response.elapsed_seconds} seconds<br>
                             Average time per IP checked was ${response.avg_time_per_ip} seconds
                         `);
-    
+
+                        // Show simple recommendations for email copy
+                        $('#simpleRecommendations').show();
+
+                        // Populate high-risk table if there are high-risk IPs
+                        console.log('Response received:', response);
+                        console.log('High risk IPs:', response.high_risk_ips);
+                        
+                        if (response.high_risk_ips && response.high_risk_ips.length > 0) {
+                            console.log('Showing high risk section with', response.high_risk_ips.length, 'IPs');
+                            $('#highRiskSection').show();
+                            var highRiskTableBody = $('#highRiskTableBody');
+                            highRiskTableBody.empty();
+                            
+                            $.each(response.high_risk_ips, function (index, data) {
+                                console.log('Adding high risk IP:', data);
+                                var row = `
+                                    <tr style="background-color: #ffebee; color: #c62828;">
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold;">${index + 1}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold;">${data.ipAddress}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold; color: #dc3545;">${data.abuseConfidenceScore}%</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">${data.isp || 'N/A'}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">${data.countryCode || 'N/A'}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">${data.totalReports || 'N/A'}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">${data.lastReportedAt || 'N/A'}</td>
+                                    </tr>
+                                `;
+                                highRiskTableBody.append(row);
+                            });
+                        } else {
+                            console.log('No high risk IPs found, hiding section');
+                            $('#highRiskSection').hide();
+                        }
+
                         if (!append) {
                             table.clear(); // Clear the table if not appending
                         }
-    
+
                         // Get current row count for ID numbering
                         var currentRowCount = table.rows().count();
                         
-                        // Populate the table with results
+                        // Populate the main table with results
                         $.each(response.output_data, function (index, data) {
                             table.row.add([
                                 currentRowCount + index + 1, // ID number starting from current count + 1
@@ -293,8 +397,7 @@
                                 data.domain,
                                 data.countryCode,
                                 data.totalReports,
-                                data.lastReportedAt,
-                                `<a href="https://www.abuseipdb.com/check/${data.ipAddress}" target="_blank">Check IP</a>`
+                                data.lastReportedAt
                             ]).draw(false);
                         });
                         
@@ -351,21 +454,17 @@
 
             var rows = [];
             var headers = [];
-            // Only select the first 8 columns, excluding the "AbuseIPDB Link" column
+            // Select all columns (8 total)
             document.querySelectorAll("table th").forEach(function (th, index) {
-                if (index < 8) {
-                    headers.push(th.innerText);
-                }
+                headers.push(th.innerText);
             });
             rows.push(headers);
 
-            // Iterate through the rows and exclude the last column (Check IP link)
+            // Iterate through all rows
             document.querySelectorAll("table tbody tr").forEach(function (tr) {
                 var row = [];
                 tr.querySelectorAll("td").forEach(function (td, index) {
-                    if (index < 8) {
-                        row.push(td.innerText);
-                    }
+                    row.push(td.innerText);
                 });
                 rows.push(row);
             });
@@ -716,6 +815,181 @@
         // Wire buttons
         $('#exportExcelStyled').on('click', function() { exportExcelStyled(); });
         $('#copyStyled').on('click', function() { copyStyledToClipboard(); });
+        
+        // High Risk Table Export Functions
+        function exportHighRiskTableToCsv() {
+            var rowCount = $('#highRiskTable tbody tr').length;
+            if (rowCount === 0) {
+                alert('No high risk IPs to export. Please run a search first.');
+                return;
+            }
+            
+            var now = new Date();
+            var timestamp = now.getFullYear() + '-' + 
+                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(now.getMonth() + 1).padStart(2, '0') + '_' +
+                           String(now.getHours()).padStart(2, '0') + '-' + 
+                           String(now.getMinutes()).padStart(2, '0');
+            var filename = 'high_risk_ips_' + timestamp + '.csv';
+            
+            var rows = [];
+            var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+            rows.push(headers);
+            
+            $('#highRiskTable tbody tr').each(function() {
+                var row = [];
+                $(this).find('td').each(function() {
+                    row.push($(this).text());
+                });
+                rows.push(row);
+            });
+            
+            exportToCsv(filename, rows);
+        }
+        
+        function exportHighRiskTableToExcel() {
+            var rowCount = $('#highRiskTable tbody tr').length;
+            if (rowCount === 0) {
+                alert('No high risk IPs to export. Please run a search first.');
+                return;
+            }
+            
+            var now = new Date();
+            var timestamp = now.getFullYear() + '-' + 
+                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(now.getDate()).padStart(2, '0') + '_' +
+                           String(now.getHours()).padStart(2, '0') + '-' + 
+                           String(now.getMinutes()).padStart(2, '0');
+            var filename = 'high_risk_ips_' + timestamp + '.xlsx';
+            
+            try {
+                var wb = XLSX.utils.book_new();
+                var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+                var rows = [];
+                
+                $('#highRiskTable tbody tr').each(function() {
+                    var row = [];
+                    $(this).find('td').each(function() {
+                        row.push($(this).text());
+                    });
+                    rows.push(row);
+                });
+                
+                var ws = XLSX.utils.aoa_to_sheet([headers].concat(rows));
+                
+                // Style header with black text
+                for (var c = 0; c < headers.length; c++) {
+                    var cell = ws[XLSX.utils.encode_cell({ r: 0, c: c })];
+                    if (!cell) continue;
+                    cell.s = {
+                        font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
+                        alignment: { horizontal: 'center', vertical: 'center' },
+                        fill: { fgColor: { rgb: '007987' } },
+                        border: { top:{style:'thin',color:{rgb:'FFB2B2B2'}}, bottom:{style:'thin',color:{rgb:'FFB2B2B2'}}, left:{style:'thin',color:{rgb:'FFB2B2B2'}}, right:{style:'thin',color:{rgb:'FFB2B2B2'}} }
+                    };
+                }
+                
+                // Style rows with red text
+                for (var r = 1; r <= rows.length; r++) {
+                    for (var c = 0; c < headers.length; c++) {
+                        var cell = ws[XLSX.utils.encode_cell({ r: r, c: c })];
+                        if (!cell) continue;
+                        cell.s = {
+                            font: { name: 'Calibri', sz: 11, color: { rgb: 'DC3545' } },
+                            fill: { fgColor: { rgb: 'C9FFFF' } },
+                            border: { top:{style:'thin',color:{rgb:'FFB2B2B2'}}, bottom:{style:'thin',color:{rgb:'FFB2B2B2'}}, left:{style:'thin',color:{rgb:'FFB2B2B2'}}, right:{style:'thin',color:{rgb:'FFB2B2B2'}} }
+                        };
+                    }
+                }
+                
+                XLSX.utils.book_append_sheet(wb, ws, 'High Risk IPs');
+                XLSX.writeFile(wb, filename);
+                showExportMessage('High Risk IPs exported to Excel: ' + filename, 'success');
+            } catch (error) {
+                showExportMessage('High Risk IPs Excel export failed: ' + error.message, 'error');
+            }
+        }
+        
+        function copyHighRiskTableForExcel() {
+            var rowCount = $('#highRiskTable tbody tr').length;
+            if (rowCount === 0) {
+                alert('No high risk IPs to copy. Please run a search first.');
+                return;
+            }
+            
+            var html = buildHighRiskTableHtml();
+            try {
+                if (navigator.clipboard && window.ClipboardItem) {
+                    var item = new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) });
+                    navigator.clipboard.write([item]);
+                    showExportMessage('High Risk IPs table copied to clipboard! Paste into Excel to keep formatting.', 'success');
+                } else {
+                    // Fallback for older browsers
+                    var div = document.createElement('div');
+                    div.contentEditable = true;
+                    div.style.position = 'fixed';
+                    div.style.left = '-9999px';
+                    div.innerHTML = html;
+                    document.body.appendChild(div);
+                    var range = document.createRange();
+                    range.selectNodeContents(div);
+                    var sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    document.execCommand('copy');
+                    document.body.removeChild(div);
+                    showExportMessage('High Risk IPs table copied to clipboard! Paste into Excel to keep formatting.', 'success');
+                }
+            } catch (e) {
+                showExportMessage('High Risk IPs copy failed: ' + e.message, 'error');
+            }
+        }
+        
+        function buildHighRiskTableHtml() {
+            var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+            var colWidths = [];
+            
+            // Calculate width for each column
+            for (var c = 0; c < headers.length; c++) {
+                var maxWidth = headers[c].length;
+                $('#highRiskTable tbody tr').each(function() {
+                    var tds = $(this).find('td');
+                    if (tds.length > c) {
+                        var cellValue = $(tds[c]).text();
+                        var cellLength = cellValue.length;
+                        if (cellValue.includes('@') || cellValue.includes('.')) {
+                            cellLength += 1;
+                        }
+                        cellLength += 2;
+                        maxWidth = Math.max(maxWidth, cellLength);
+                    }
+                });
+                maxWidth = Math.max(8, Math.min(maxWidth, 50));
+                colWidths.push(maxWidth);
+            }
+            
+            var headerStyle = 'background-color:#007987;color:#000000;font-weight:bold;text-align:center;border:1px solid #B2B2B2;padding:6px;font-family:Calibri, Arial, sans-serif;font-size:11pt;';
+            var rowStyle = 'background-color:#C9FFFF;color:#DC3545;border:1px solid #B2B2B2;padding:6px;font-family:Calibri, Arial, sans-serif;font-size:11pt;text-align:center;';
+            var tableStyle = 'border-collapse:collapse;width:100%;font-family:Calibri, Arial, sans-serif;font-size:11pt;';
+            
+            var html = '<table style="' + tableStyle + '"><thead><tr>';
+            headers.forEach(function(header, index) {
+                html += '<th style="' + headerStyle + 'width:' + (colWidths[index] * 10) + 'px;">' + header + '</th>';
+            });
+            html += '</tr></thead><tbody>';
+            
+            $('#highRiskTable tbody tr').each(function() {
+                var tds = $(this).find('td');
+                html += '<tr>';
+                tds.each(function(index) {
+                    html += '<td style="' + rowStyle + 'width:' + (colWidths[index] * 10) + 'px;">' + $(this).text() + '</td>';
+                });
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            return html;
+        }
     </script>
     
     

@@ -163,13 +163,50 @@ def bulk_check(file=None, text=None, api_key=None):
         elapsed_seconds = round(elapsed_seconds, 1)
         avg_time_per_ip = round(elapsed_time / total_rows, 1) if total_rows > 0 else 0
 
-        return {
+        # Separate high-risk IPs (score > 80 and not major cloud providers)
+        high_risk_ips = []
+        safe_ips = []
+        
+        print("=== DEBUGGING HIGH RISK IP LOGIC ===")
+        for ip_data in output_data:
+            print(f"Processing IP: {ip_data.get('ipAddress', 'N/A')}")
+            print(f"  Score: {ip_data.get('abuseConfidenceScore', 'N/A')}")
+            print(f"  ISP: {ip_data.get('isp', 'N/A')}")
+            
+            if 'abuseConfidenceScore' in ip_data and ip_data['abuseConfidenceScore'] > 80:
+                # Check if ISP is not a major cloud provider
+                isp = ip_data.get('isp', '').lower()
+                if not any(provider in isp for provider in ['microsoft', 'amazon', 'alibaba', 'google']):
+                    print(f"  -> HIGH RISK (Score > 80, not major cloud provider)")
+                    high_risk_ips.append(ip_data)
+                else:
+                    print(f"  -> SAFE (Score > 80, but major cloud provider)")
+                    safe_ips.append(ip_data)
+            else:
+                print(f"  -> SAFE (Score <= 80)")
+                safe_ips.append(ip_data)
+        
+        print(f"Total high risk IPs found: {len(high_risk_ips)}")
+        print(f"High risk IPs: {[ip.get('ipAddress') for ip in high_risk_ips]}")
+        print("=== END DEBUGGING ===")
+
+        result = {
             'output_data': output_data,
+            'high_risk_ips': high_risk_ips,
+            'safe_ips': safe_ips,
             'total_rows': total_rows,
             'elapsed_minutes': elapsed_minutes,
             'elapsed_seconds': elapsed_seconds,
             'avg_time_per_ip': avg_time_per_ip
         }
+        
+        print("=== RETURNING RESULT ===")
+        print(f"Output data count: {len(result['output_data'])}")
+        print(f"High risk IPs count: {len(result['high_risk_ips'])}")
+        print(f"Safe IPs count: {len(result['safe_ips'])}")
+        print("=== END RETURNING ===")
+        
+        return result
 
     except Exception as e:
         return {

@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Result</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -100,6 +101,173 @@
 
             exportToCsv(filename, rows);
         }
+        
+        // High Risk Table Export Functions
+        function exportHighRiskTableToCsv() {
+            var highRiskTable = document.querySelector('#highRiskTable');
+            if (!highRiskTable) {
+                alert('High Risk IPs table not found.');
+                return;
+            }
+            
+            var rowCount = highRiskTable.querySelectorAll('tbody tr').length;
+            if (rowCount === 0) {
+                alert('No high risk IPs to export. Please run a search first.');
+                return;
+            }
+            
+            var now = new Date();
+            var timestamp = now.getFullYear() + '-' + 
+                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(now.getDate()).padStart(2, '0') + '_' +
+                           String(now.getHours()).padStart(2, '0') + '-' + 
+                           String(now.getMinutes()).padStart(2, '0');
+            var filename = 'high_risk_ips_' + timestamp + '.csv';
+            
+            var rows = [];
+            var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+            rows.push(headers);
+            
+            highRiskTable.querySelectorAll('tbody tr').forEach(function(tr) {
+                var row = [];
+                tr.querySelectorAll('td').forEach(function(td) {
+                    row.push(td.textContent);
+                });
+                rows.push(row);
+            });
+            
+            exportToCsv(filename, rows);
+        }
+        
+        function exportHighRiskTableToExcel() {
+            var highRiskTable = document.querySelector('#highRiskTable');
+            if (!highRiskTable) {
+                alert('High Risk IPs table not found.');
+                return;
+            }
+            
+            var rowCount = highRiskTable.querySelectorAll('tbody tr').length;
+            if (rowCount === 0) {
+                alert('No high risk IPs to export. Please run a search first.');
+                return;
+            }
+            
+            var now = new Date();
+            var timestamp = now.getFullYear() + '-' + 
+                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(now.getDate()).padStart(2, '0') + '_' +
+                           String(now.getHours()).padStart(2, '0') + '-' + 
+                           String(now.getMinutes()).padStart(2, '0');
+            var filename = 'high_risk_ips_' + timestamp + '.xlsx';
+            
+            try {
+                var wb = XLSX.utils.book_new();
+                var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+                var rows = [];
+                
+                highRiskTable.querySelectorAll('tbody tr').forEach(function(tr) {
+                    var row = [];
+                    tr.querySelectorAll('td').forEach(function(td) {
+                        row.push(td.textContent);
+                    });
+                    rows.push(row);
+                });
+                
+                var ws = XLSX.utils.aoa_to_sheet([headers].concat(rows));
+                
+                // Style header with black text
+                for (var c = 0; c < headers.length; c++) {
+                    var cell = ws[XLSX.utils.encode_cell({ r: 0, c: c })];
+                    if (!cell) continue;
+                    cell.s = {
+                        font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: '000000' } },
+                        alignment: { horizontal: 'center', vertical: 'center' },
+                        fill: { fgColor: { rgb: '007987' } },
+                        border: { top:{style:'thin',color:{rgb:'FFB2B2B2'}}, bottom:{style:'thin',color:{rgb:'FFB2B2B2'}}, left:{style:'thin',color:{rgb:'FFB2B2B2'}}, right:{style:'thin',color:{rgb:'FFB2B2B2'}} }
+                    };
+                }
+                
+                // Style rows with red text
+                for (var r = 1; r <= rows.length; r++) {
+                    for (var c = 0; c < headers.length; c++) {
+                        var cell = ws[XLSX.utils.encode_cell({ r: r, c: c })];
+                        if (!cell) continue;
+                        cell.s = {
+                            font: { name: 'Calibri', sz: 11, color: { rgb: 'DC3545' } },
+                            fill: { fgColor: { rgb: 'C9FFFF' } },
+                            border: { top:{style:'thin',color:{rgb:'FFB2B2B2'}}, bottom:{style:'thin',color:{rgb:'FFB2B2B2'}}, left:{style:'thin',color:{rgb:'FFB2B2B2'}}, right:{style:'thin',color:{rgb:'FFB2B2B2'}} }
+                        };
+                    }
+                }
+                
+                XLSX.utils.book_append_sheet(wb, ws, 'High Risk IPs');
+                XLSX.writeFile(wb, filename);
+                alert('High Risk IPs exported to Excel: ' + filename);
+            } catch (error) {
+                alert('High Risk IPs Excel export failed: ' + error.message);
+            }
+        }
+        
+        function copyHighRiskTableForExcel() {
+            var highRiskTable = document.querySelector('#highRiskTable');
+            if (!highRiskTable) {
+                alert('High Risk IPs table not found.');
+                return;
+            }
+            
+            var rowCount = highRiskTable.querySelectorAll('tbody tr').length;
+            if (rowCount === 0) {
+                alert('No high risk IPs to copy. Please run a search first.');
+                return;
+            }
+            
+            var tableData = [];
+            var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+            tableData.push(headers.join('\t'));
+            
+            highRiskTable.querySelectorAll('tbody tr').forEach(function(tr) {
+                var row = [];
+                tr.querySelectorAll('td').forEach(function(td) {
+                    row.push(td.textContent);
+                });
+                tableData.push(row.join('\t'));
+            });
+            
+            var textToCopy = tableData.join('\n');
+            
+            if (navigator.clipboard && window.ClipboardItem) {
+                navigator.clipboard.writeText(textToCopy).then(function() {
+                    alert('High Risk IPs table copied to clipboard! Paste into Excel.');
+                }).catch(function() {
+                    fallbackCopyTextToClipboard(textToCopy);
+                });
+            } else {
+                fallbackCopyTextToClipboard(textToCopy);
+            }
+        }
+        
+        function fallbackCopyTextToClipboard(text) {
+            var textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-9999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                var successful = document.execCommand('copy');
+                if (successful) {
+                    alert('High Risk IPs table copied to clipboard! Paste into Excel.');
+                } else {
+                    alert('Copy failed. Please manually select and copy the table.');
+                }
+            } catch (err) {
+                alert('Copy failed. Please manually select and copy the table.');
+            }
+            
+            document.body.removeChild(textArea);
+        }
     </script>
 </head>
 <body>
@@ -110,6 +278,63 @@
         <p>Started check of {{ result.total_rows }} IPs<br>
         Completed check in {{ result.elapsed_minutes }} minutes and {{ result.elapsed_seconds }} seconds<br>
         Average time per IP checked was {{ result.avg_time_per_ip }} seconds</p>
+        
+        <!-- Simple Recommendations for Email Copy -->
+        <div style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+            <h3 style="margin-top: 0; color: #333;">📧 Security Recommendations (Copy for Email)</h3>
+            <div style="font-family: monospace; background-color: white; padding: 15px; border: 1px solid #ddd; border-radius: 3px;">
+                <strong>Key Security Actions Required:</strong><br>
+                1. Confirm if these IPs have legitimate business use, otherwise block immediately<br>
+                2. Ensure closure of unused ports to enhance security posture<br>
+                3. Implement server access restrictions for added security layer<br>
+                <br>
+                <strong>High Risk IPs (Score > 80):</strong><br>
+                These IPs have high abuse confidence scores and are not from major cloud providers. Immediate action is recommended.
+            </div>
+        </div>
+        
+        <!-- High Risk IPs Table -->
+        {% if result.high_risk_ips and result.high_risk_ips|length > 0 %}
+        <div style="margin: 20px 0;">
+            <h2 style="color: #dc3545; border-bottom: 3px solid #dc3545; padding-bottom: 10px;">🚨 High Risk IPs (Score > 80)</h2>
+            <p style="color: #6c757d; font-style: italic; margin-bottom: 15px;">These IPs have high abuse confidence scores and are not from major cloud providers. Immediate action is recommended.</p>
+            
+            <!-- Export Buttons for High Risk Table -->
+            <div style="display:flex; gap:10px; flex-wrap: wrap; margin-bottom: 15px;">
+                <button class="export-button" onclick="exportHighRiskTableToCsv()" title="Export high risk IPs as CSV file">Export High Risk as CSV</button>
+                <button class="export-button" onclick="exportHighRiskTableToExcel()" title="Export high risk IPs as Excel file">Export High Risk to Excel</button>
+                <button class="export-button" onclick="copyHighRiskTableForExcel()" title="Copy high risk IPs table for Excel pasting">Copy High Risk for Excel</button>
+            </div>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <thead>
+                    <tr style="background-color: #dc3545; color: white;">
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">ID</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">IP Address</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Abuse Score</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">ISP</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Country</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Total Reports</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Last Reported</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for data in result.high_risk_ips %}
+                    <tr style="background-color: #ffebee; color: #c62828;">
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold;">{{ loop.index }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold;">{{ data.ipAddress }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold; color: #dc3545;">{{ data.abuseConfidenceScore }}%</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">{{ data.isp or 'N/A' }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">{{ data.countryCode or 'N/A' }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">{{ data.totalReports or 'N/A' }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">{{ data.lastReportedAt or 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        
         <button class="export-button" onclick="exportTableToCsv('output.csv')">Export as CSV</button>
         <h2>Output Data</h2>
         <table>
