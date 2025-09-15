@@ -38,16 +38,16 @@ optimized_session = create_optimized_session()
 app = Flask(__name__)
 
 # API key for AbuseIPDB
-api_key = ""
-OTX_API_KEY=""
-
+api_key = "afff296b18e8be5f55036f9910acb04749ea415b10952bef60bd2fe4adff8fe3722bc5de3f8eddcc"
+OTX_API_KEY="491c2539b77d9dbb4c6df06ad467cbc0e8de73064c45148e58a3663042b3902b"
+ 
 # API key for VirusTotal
 # To get your VirusTotal API key:
 # 1. Sign up at https://www.virustotal.com/
 # 2. Go to your profile settings
 # 3. Generate an API key
 # 4. Replace the value below with your actual API key
-virustotal_api_key = ""  # Replace with your VirusTotal API key
+virustotal_api_key = "0fa15de267b5e0b41802cd23a8d6078b374cfd4bf20a3b22d88b64707c147eec"  # Replace with your VirusTotal API key
 
 DB_PATH = 'ip_cache.db'
 
@@ -79,12 +79,35 @@ def get_cached_ip(ip):
                 abuseipdb_data = json.loads(row[0]) if row[0] else None
                 virustotal_data = json.loads(row[1]) if row[1] else None
                 otx_data = json.loads(row[2]) if row[2] else None
+                
+                # If we have old-style cached data (single 'data' field), convert it
+                if abuseipdb_data and 'abuseConfidencePercentage' in abuseipdb_data:
+                    # Convert old format to new format
+                    abuseipdb_data = {
+                        'ipAddress': abuseipdb_data.get('ipAddress', ip),
+                        'isPublic': abuseipdb_data.get('isPublic', False),
+                        'ipVersion': abuseipdb_data.get('ipVersion', 4),
+                        'isWhitelisted': abuseipdb_data.get('isWhitelisted', False),
+                        'abuseConfidenceScore': abuseipdb_data.get('abuseConfidencePercentage', 0),
+                        'countryCode': abuseipdb_data.get('countryCode', 'N/A'),
+                        'usageType': abuseipdb_data.get('usageType', 'N/A'),
+                        'isp': abuseipdb_data.get('isp', 'N/A'),
+                        'domain': abuseipdb_data.get('domain', 'N/A'),
+                        'hostnames': abuseipdb_data.get('hostnames', []),
+                        'isTor': abuseipdb_data.get('isTor', False),
+                        'totalReports': abuseipdb_data.get('totalReports', 0),
+                        'numDistinctUsers': abuseipdb_data.get('numDistinctUsers', 0),
+                        'lastReportedAt': abuseipdb_data.get('lastReportedAt', 'N/A'),
+                        'status': 'success'
+                    }
+                
                 return {
                     'abuseipdb': abuseipdb_data,
                     'virustotal': virustotal_data,
                     'otx': otx_data
                 }
-            except Exception:
+            except Exception as e:
+                print(f"Error parsing cached data for {ip}: {e}")
                 return None
         return None
     finally:
@@ -168,11 +191,29 @@ def check_virustotal_ip(ip, api_key):
                 'status': 'not_found',
                 'error': 'IP not found in VirusTotal database'
             }
+        elif response.status_code == 401:
+            return {
+                'ip': ip,
+                'status': 'error',
+                'error': 'VirusTotal API authentication failed - please check your API key'
+            }
+        elif response.status_code == 403:
+            return {
+                'ip': ip,
+                'status': 'error',
+                'error': 'VirusTotal API access forbidden - check your API key permissions'
+            }
+        elif response.status_code == 429:
+            return {
+                'ip': ip,
+                'status': 'error',
+                'error': 'VirusTotal API rate limit exceeded - please wait and try again'
+            }
         else:
             return {
                 'ip': ip,
                 'status': 'error',
-                'error': f'VirusTotal API error: {response.status_code}'
+                'error': f'VirusTotal API error: HTTP {response.status_code} - {response.text[:100] if response.text else "Unknown error"}'
             }
     except requests.exceptions.Timeout:
         return {
@@ -279,11 +320,29 @@ def check_otx_ip(ip, api_key):
                 'whitelisted': False,
                 'status': 'not_found'
             }
+        elif response.status_code == 401:
+            return {
+                'ip': ip,
+                'status': 'error',
+                'error': 'OTX API authentication failed - please check your API key'
+            }
+        elif response.status_code == 403:
+            return {
+                'ip': ip,
+                'status': 'error',
+                'error': 'OTX API access forbidden - check your API key permissions'
+            }
+        elif response.status_code == 429:
+            return {
+                'ip': ip,
+                'status': 'error',
+                'error': 'OTX API rate limit exceeded - please wait and try again'
+            }
         else:
             return {
                 'ip': ip,
                 'status': 'error',
-                'error': f'OTX API error: {response.status_code}'
+                'error': f'OTX API error: HTTP {response.status_code} - {response.text[:100] if response.text else "Unknown error"}'
             }
     except requests.exceptions.Timeout:
         return {
@@ -342,7 +401,28 @@ def bulk_check(file=None, text=None, api_key=None):
                 
                 # Add AbuseIPDB data if available
                 if cached.get('abuseipdb'):
-                    final_data.update(cached['abuseipdb'])
+                    abuseipdb_data = cached['abuseipdb']
+                    final_data.update(abuseipdb_data)
+                    # Ensure all required fields exist with default values
+                    final_data.setdefault('ipAddress', ip)
+                    final_data.setdefault('isp', 'N/A')
+                    final_data.setdefault('domain', 'N/A')
+                    final_data.setdefault('countryCode', 'N/A')
+                    final_data.setdefault('totalReports', 0)
+                    final_data.setdefault('lastReportedAt', 'N/A')
+                    final_data.setdefault('abuseConfidenceScore', 0)
+                else:
+                    # If no cached AbuseIPDB data, create default structure
+                    final_data = {
+                        'ipAddress': ip,
+                        'isp': 'N/A',
+                        'domain': 'N/A',
+                        'countryCode': 'N/A',
+                        'totalReports': 0,
+                        'lastReportedAt': 'N/A',
+                        'abuseConfidenceScore': 0,
+                        'error': 'AbuseIPDB data not available'
+                    }
                 
                 # Add VirusTotal data if available
                 if cached.get('virustotal'):
@@ -387,24 +467,44 @@ def bulk_check(file=None, text=None, api_key=None):
                 except queue.Empty:
                     break
                 try:
-                    # Optimized request with connection pooling
-                    response = optimized_session.get(
+                    # Use the working approach from the old code
+                    response = requests.get(
                         f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}",
                         headers={'Accept': 'application/json', 'Key': api_key},
-                        timeout=5  # Reduced timeout for faster failure
+                        timeout=10
                     )
                     if response.status_code == 200:
-                        data = response.json()['data']
+                        raw_data = response.json()['data']
+                        # Map the API response to our expected structure
+                        data = {
+                            'ipAddress': raw_data.get('ipAddress', ip),
+                            'isPublic': raw_data.get('isPublic', False),
+                            'ipVersion': raw_data.get('ipVersion', 4),
+                            'isWhitelisted': raw_data.get('isWhitelisted', False),
+                            'abuseConfidenceScore': raw_data.get('abuseConfidencePercentage', 0),
+                            'countryCode': raw_data.get('countryCode', 'N/A'),
+                            'usageType': raw_data.get('usageType', 'N/A'),
+                            'isp': raw_data.get('isp', 'N/A'),
+                            'domain': raw_data.get('domain', 'N/A'),
+                            'hostnames': raw_data.get('hostnames', []),
+                            'isTor': raw_data.get('isTor', False),
+                            'totalReports': raw_data.get('totalReports', 0),
+                            'numDistinctUsers': raw_data.get('numDistinctUsers', 0),
+                            'lastReportedAt': raw_data.get('lastReportedAt', 'N/A'),
+                            'status': 'success'
+                        }
+                        print(f"✅ AbuseIPDB success for {ip}: Score={data['abuseConfidenceScore']}, ISP={data['isp']}")
                     else:
                         data = {'ipAddress': ip, 'error': f'HTTP {response.status_code}'}
+                        print(f"❌ AbuseIPDB error for {ip}: HTTP {response.status_code}")
                     
                     # Cache AbuseIPDB data
                     set_cached_ip(ip, abuseipdb_data=data)
                     result_queue.put(('abuseipdb', ip, data))
                 except requests.exceptions.Timeout:
-                    result_queue.put(('abuseipdb', ip, {'ipAddress': ip, 'error': 'Timeout'}))
+                    result_queue.put(('abuseipdb', ip, {'ipAddress': ip, 'error': 'AbuseIPDB API timeout - request took too long'}))
                 except Exception as fetch_err:
-                    result_queue.put(('abuseipdb', ip, {'ipAddress': ip, 'error': f'Error: {str(fetch_err)}'}))
+                    result_queue.put(('abuseipdb', ip, {'ipAddress': ip, 'error': f'AbuseIPDB check failed: {str(fetch_err)}'}))
                 finally:
                     abuseipdb_queue.task_done()
 
@@ -501,9 +601,30 @@ def bulk_check(file=None, text=None, api_key=None):
         for ip, ip_results in results_by_ip.items():
             final_data = {}
             
-            # Add AbuseIPDB data
+            # Add AbuseIPDB data with default values
             if 'abuseipdb' in ip_results:
-                final_data.update(ip_results['abuseipdb'])
+                abuseipdb_data = ip_results['abuseipdb']
+                final_data.update(abuseipdb_data)
+                # Ensure all required fields exist with default values
+                final_data.setdefault('ipAddress', ip)
+                final_data.setdefault('isp', 'N/A')
+                final_data.setdefault('domain', 'N/A')
+                final_data.setdefault('countryCode', 'N/A')
+                final_data.setdefault('totalReports', 0)
+                final_data.setdefault('lastReportedAt', 'N/A')
+                final_data.setdefault('abuseConfidenceScore', 0)
+            else:
+                # If no AbuseIPDB data, create default structure
+                final_data = {
+                    'ipAddress': ip,
+                    'isp': 'N/A',
+                    'domain': 'N/A',
+                    'countryCode': 'N/A',
+                    'totalReports': 0,
+                    'lastReportedAt': 'N/A',
+                    'abuseConfidenceScore': 0,
+                    'error': 'AbuseIPDB data not available'
+                }
             
             # Add VirusTotal data
             if 'virustotal' in ip_results:
