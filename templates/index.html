@@ -272,11 +272,14 @@
                     <tr style="background-color: #dc3545; color: white;">
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">ID</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">IP Address</th>
-                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Abuse Score</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">ISP</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Country</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Total Reports</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Last Reported</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">VirusTotal Malicious</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">OTX Risk Category</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">OTX Risk Score</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Abuse Score</th>
                     </tr>
                 </thead>
                 <tbody id="highRiskTableBody">
@@ -300,12 +303,15 @@
                 <tr>
                     <th>ID</th>
                     <th>IP Address</th>
-                    <th>Abuse Confidence Score</th>
                     <th>ISP</th>
                     <th>Domain</th>
                     <th>Country Code</th>
                     <th>Total Reports</th>
                     <th>Last Reported At</th>
+                    <th>VirusTotal Malicious</th>
+                    <th>OTX Risk Category</th>
+                    <th>OTX Risk Score</th>
+                    <th>Abuse Confidence Score</th>
                 </tr>
             </thead>
             <tbody>
@@ -322,17 +328,37 @@
             });
     
             function submitForm(append = false) {
-                var formData = new FormData($('#ipForm')[0]);
+                // Get form data
+                var inputText = $('#input_text').val();
+                var inputFile = $('#input_csv')[0].files[0];
                 
                 // Show progress indicator
                 $('#progress').show();
-    
+                
+                // Prepare request data
+                var requestData = {
+                    input_text: inputText
+                };
+                
+                // Handle CSV file if uploaded
+                if (inputFile) {
+                    var reader = new FileReader();
+                    reader.onload = function(e) {
+                        requestData.input_csv_data = e.target.result;
+                        makeApiCall(requestData, append);
+                    };
+                    reader.readAsText(inputFile);
+                } else {
+                    makeApiCall(requestData, append);
+                }
+            }
+            
+            function makeApiCall(requestData, append = false) {
                 $.ajax({
-                    url: '/',
+                    url: '/api/check-ips',
                     type: 'POST',
-                    data: formData,
-                    contentType: false,
-                    processData: false,
+                    contentType: 'application/json',
+                    data: JSON.stringify(requestData),
                     success: function (response) {
                         // Hide progress indicator
                         $('#progress').hide();
@@ -362,15 +388,34 @@
                             
                             $.each(response.high_risk_ips, function (index, data) {
                                 console.log('Adding high risk IP:', data);
+                                
+                                // Extract VirusTotal data
+                                var vt_data = data.virustotal || {};
+                                var vt_malicious = vt_data.malicious_votes || 0;
+                                
+                                // Extract OTX data
+                                var otx_data = data.otx || {};
+                                var otx_risk = otx_data.risk || 'CLEAN';
+                                var otx_score = otx_data.score || 0;
+                                
+                                // Color code OTX risk
+                                var otx_risk_color = '#28a745'; // green for CLEAN
+                                if (otx_risk === 'HIGH') otx_risk_color = '#dc3545'; // red
+                                else if (otx_risk === 'MEDIUM') otx_risk_color = '#ffc107'; // yellow
+                                else if (otx_risk === 'LOW') otx_risk_color = '#17a2b8'; // blue
+                                
                                 var row = `
                                     <tr style="background-color: #ffebee; color: #c62828;">
                                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold;">${index + 1}</td>
                                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold;">${data.ipAddress}</td>
-                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold; color: #dc3545;">${data.abuseConfidenceScore}%</td>
                                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">${data.isp || 'N/A'}</td>
                                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">${data.countryCode || 'N/A'}</td>
                                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">${data.totalReports || 'N/A'}</td>
                                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">${data.lastReportedAt || 'N/A'}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; color: ${vt_malicious > 0 ? '#dc3545' : '#28a745'}; font-weight: bold;">${vt_malicious}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; color: ${otx_risk_color}; font-weight: bold;">${otx_risk}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; color: ${otx_risk_color}; font-weight: bold;">${otx_score}</td>
+                                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold; color: #dc3545;">${data.abuseConfidenceScore}%</td>
                                     </tr>
                                 `;
                                 highRiskTableBody.append(row);
@@ -389,15 +434,27 @@
                         
                         // Populate the main table with results
                         $.each(response.output_data, function (index, data) {
+                            // Extract VirusTotal data
+                            var vt_data = data.virustotal || {};
+                            var vt_malicious = vt_data.malicious_votes || 0;
+                            
+                            // Extract OTX data
+                            var otx_data = data.otx || {};
+                            var otx_risk = otx_data.risk || 'CLEAN';
+                            var otx_score = otx_data.score || 0;
+                            
                             table.row.add([
                                 currentRowCount + index + 1, // ID number starting from current count + 1
                                 data.ipAddress,
-                                data.abuseConfidenceScore,
                                 data.isp,
                                 data.domain,
                                 data.countryCode,
                                 data.totalReports,
-                                data.lastReportedAt
+                                data.lastReportedAt,
+                                vt_malicious,
+                                otx_risk,
+                                otx_score,
+                                data.abuseConfidenceScore
                             ]).draw(false);
                         });
                         
@@ -414,8 +471,16 @@
                     error: function (xhr, status, error) {
                         // Hide progress indicator
                         $('#progress').hide();
-    
-                        alert('An error occurred: ' + xhr.responseText);
+                        
+                        var errorMessage = 'An error occurred';
+                        try {
+                            var response = JSON.parse(xhr.responseText);
+                            errorMessage = response.error || errorMessage;
+                        } catch (e) {
+                            errorMessage = xhr.responseText || errorMessage;
+                        }
+                        
+                        alert('Error: ' + errorMessage);
                     }
                 });
             }
@@ -580,7 +645,7 @@
         // Build styled HTML table for Excel export/copy
         function buildStyledTableHtml() {
             // Calculate column widths for auto-sizing (same as Excel export)
-            var headers = ['ID', 'IP Address', 'Abuse Confidence Score', 'ISP', 'Domain', 'Country Code', 'Total Reports', 'Last Reported At'];
+            var headers = ['ID', 'IP Address', 'ISP', 'Domain', 'Country Code', 'Total Reports', 'Last Reported At', 'VirusTotal Malicious', 'OTX Risk Category', 'OTX Risk Score', 'Abuse Confidence Score'];
             var colWidths = [];
             
             // Calculate width for each column (same algorithm as Excel export)
@@ -617,34 +682,43 @@
             var html = '<table style="' + tableStyle + '"><thead><tr>' +
                 '<th style="' + headerStyle + 'width:' + (colWidths[0] * 10) + 'px;">ID</th>' +
                 '<th style="' + headerStyle + 'width:' + (colWidths[1] * 10) + 'px;">IP Address</th>' +
-                '<th style="' + headerStyle + 'width:' + (colWidths[2] * 10) + 'px;">Abuse Confidence Score</th>' +
-                '<th style="' + headerStyle + 'width:' + (colWidths[3] * 10) + 'px;">ISP</th>' +
-                '<th style="' + headerStyle + 'width:' + (colWidths[4] * 10) + 'px;">Domain</th>' +
-                '<th style="' + headerStyle + 'width:' + (colWidths[5] * 10) + 'px;">Country Code</th>' +
-                '<th style="' + headerStyle + 'width:' + (colWidths[6] * 10) + 'px;">Total Reports</th>' +
-                '<th style="' + headerStyle + 'width:' + (colWidths[7] * 10) + 'px;">Last Reported At</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[2] * 10) + 'px;">ISP</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[3] * 10) + 'px;">Domain</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[4] * 10) + 'px;">Country Code</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[5] * 10) + 'px;">Total Reports</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[6] * 10) + 'px;">Last Reported At</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[7] * 10) + 'px;">VirusTotal Malicious</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[8] * 10) + 'px;">OTX Risk Category</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[9] * 10) + 'px;">OTX Risk Score</th>' +
+                '<th style="' + headerStyle + 'width:' + (colWidths[10] * 10) + 'px;">Abuse Confidence Score</th>' +
             '</tr></thead><tbody>';
 
             $('#resultsTable tbody tr').each(function(i) {
                 var tds = $(this).find('td');
                 var idVal = $(tds[0]).text();
                 var ip = $(tds[1]).text();
-                var score = $(tds[2]).text();
-                var isp = $(tds[3]).text();
-                var domain = $(tds[4]).text();
-                var cc = $(tds[5]).text();
-                var reports = $(tds[6]).text();
-                var last = $(tds[7]).text();
+                var isp = $(tds[2]).text();
+                var domain = $(tds[3]).text();
+                var cc = $(tds[4]).text();
+                var reports = $(tds[5]).text();
+                var last = $(tds[6]).text();
+                var vtMalicious = $(tds[7]).text();
+                var otxRisk = $(tds[8]).text();
+                var otxScore = $(tds[9]).text();
+                var score = $(tds[10]).text();
 
                 html += '<tr>' +
                     '<td style="' + rowStyle + 'width:' + (colWidths[0] * 10) + 'px;mso-number-format:\'@\';">' + idVal + '</td>' +
                     '<td style="' + rowStyle + 'width:' + (colWidths[1] * 10) + 'px;">' + ip + '</td>' +
-                    '<td style="' + rowStyle + 'width:' + (colWidths[2] * 10) + 'px;">' + score + '</td>' +
-                    '<td style="' + rowStyle + 'width:' + (colWidths[3] * 10) + 'px;">' + isp + '</td>' +
-                    '<td style="' + rowStyle + 'width:' + (colWidths[4] * 10) + 'px;">' + domain + '</td>' +
-                    '<td style="' + rowStyle + 'width:' + (colWidths[5] * 10) + 'px;">' + cc + '</td>' +
-                    '<td style="' + rowStyle + 'width:' + (colWidths[6] * 10) + 'px;">' + reports + '</td>' +
-                    '<td style="' + rowStyle + 'width:' + (colWidths[7] * 10) + 'px;">' + last + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[2] * 10) + 'px;">' + isp + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[3] * 10) + 'px;">' + domain + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[4] * 10) + 'px;">' + cc + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[5] * 10) + 'px;">' + reports + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[6] * 10) + 'px;">' + last + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[7] * 10) + 'px;">' + vtMalicious + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[8] * 10) + 'px;">' + otxRisk + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[9] * 10) + 'px;">' + otxScore + '</td>' +
+                    '<td style="' + rowStyle + 'width:' + (colWidths[10] * 10) + 'px;">' + score + '</td>' +
                 '</tr>';
             });
 
@@ -674,7 +748,7 @@
 
             try {
                 var wb = XLSX.utils.book_new();
-                var headers = ['ID','IP Address','Abuse Confidence Score','ISP','Domain','Country Code','Total Reports','Last Reported At'];
+                var headers = ['ID','IP Address','ISP','Domain','Country Code','Total Reports','Last Reported At','VirusTotal Malicious','OTX Risk Category','OTX Risk Score','Abuse Confidence Score'];
                 var rows = [];
                 $('#resultsTable tbody tr').each(function(i){
                     var tds = $(this).find('td');
@@ -686,7 +760,10 @@
                         $(tds[4]).text(),
                         $(tds[5]).text(),
                         $(tds[6]).text(),
-                        $(tds[7]).text()
+                        $(tds[7]).text(),
+                        $(tds[8]).text(),
+                        $(tds[9]).text(),
+                        $(tds[10]).text()
                     ]);
                 });
 
@@ -833,7 +910,7 @@
             var filename = 'high_risk_ips_' + timestamp + '.csv';
             
             var rows = [];
-            var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+            var headers = ['ID', 'IP Address', 'ISP', 'Country', 'Total Reports', 'Last Reported', 'VirusTotal Malicious', 'OTX Risk Category', 'OTX Risk Score', 'Abuse Score'];
             rows.push(headers);
             
             $('#highRiskTable tbody tr').each(function() {
@@ -864,7 +941,7 @@
             
             try {
                 var wb = XLSX.utils.book_new();
-                var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+                var headers = ['ID', 'IP Address', 'ISP', 'Country', 'Total Reports', 'Last Reported', 'VirusTotal Malicious', 'OTX Risk Category', 'OTX Risk Score', 'Abuse Score'];
                 var rows = [];
                 
                 $('#highRiskTable tbody tr').each(function() {
@@ -946,7 +1023,7 @@
         }
         
         function buildHighRiskTableHtml() {
-            var headers = ['ID', 'IP Address', 'Abuse Score', 'ISP', 'Country', 'Total Reports', 'Last Reported'];
+            var headers = ['ID', 'IP Address', 'ISP', 'Country', 'Total Reports', 'Last Reported', 'VirusTotal Malicious', 'OTX Risk Category', 'OTX Risk Score', 'Abuse Score'];
             var colWidths = [];
             
             // Calculate width for each column

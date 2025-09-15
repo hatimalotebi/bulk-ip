@@ -311,11 +311,14 @@
                     <tr style="background-color: #dc3545; color: white;">
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">ID</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">IP Address</th>
-                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Abuse Score</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">ISP</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Country</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Total Reports</th>
                         <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Last Reported</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">VirusTotal Malicious</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">OTX Risk Category</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">OTX Risk Score</th>
+                        <th style="border: 1px solid #dc3545; padding: 10px; text-align: center;">Abuse Score</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -323,11 +326,14 @@
                     <tr style="background-color: #ffebee; color: #c62828;">
                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold;">{{ loop.index }}</td>
                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold;">{{ data.ipAddress }}</td>
-                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold; color: #dc3545;">{{ data.abuseConfidenceScore }}%</td>
                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">{{ data.isp or 'N/A' }}</td>
                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">{{ data.countryCode or 'N/A' }}</td>
                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">{{ data.totalReports or 'N/A' }}</td>
                         <td style="border: 1px solid #dc3545; padding: 8px; text-align: center;">{{ data.lastReportedAt or 'N/A' }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; color: {{ '#dc3545' if (data.virustotal and data.virustotal.malicious_votes > 0) else '#28a745' }}; font-weight: bold;">{{ data.virustotal.malicious_votes if data.virustotal else 0 }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; color: {{ '#dc3545' if (data.otx and data.otx.risk == 'HIGH') else '#ffc107' if (data.otx and data.otx.risk == 'MEDIUM') else '#17a2b8' if (data.otx and data.otx.risk == 'LOW') else '#28a745' }}; font-weight: bold;">{{ data.otx.risk if data.otx else 'CLEAN' }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; color: {{ '#dc3545' if (data.otx and data.otx.risk == 'HIGH') else '#ffc107' if (data.otx and data.otx.risk == 'MEDIUM') else '#17a2b8' if (data.otx and data.otx.risk == 'LOW') else '#28a745' }}; font-weight: bold;">{{ data.otx.score if data.otx else 0 }}</td>
+                        <td style="border: 1px solid #dc3545; padding: 8px; text-align: center; font-weight: bold; color: #dc3545;">{{ data.abuseConfidenceScore }}%</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -340,22 +346,28 @@
         <table>
             <tr>
                 <th>IP Address</th>
-                <th>Abuse Confidence Score</th>
                 <th>ISP</th>
                 <th>Domain</th>
                 <th>Country Code</th>
                 <th>Total Reports</th>
                 <th>Last Reported At</th>
+                <th>VirusTotal Malicious</th>
+                <th>OTX Risk Category</th>
+                <th>OTX Risk Score</th>
+                <th>Abuse Confidence Score</th>
             </tr>
             {% for data in result.output_data %}
                 <tr>
                     <td>{{ data.ipAddress }}</td>
-                    <td>{{ data.abuseConfidenceScore }}</td>
                     <td>{{ data.isp }}</td>
                     <td>{{ data.domain }}</td>
                     <td>{{ data.countryCode }}</td>
                     <td>{{ data.totalReports }}</td>
                     <td>{{ data.lastReportedAt }}</td>
+                    <td>{{ data.virustotal.malicious_votes if data.virustotal else 0 }}</td>
+                    <td>{{ data.otx.risk if data.otx else 'CLEAN' }}</td>
+                    <td>{{ data.otx.score if data.otx else 0 }}</td>
+                    <td>{{ data.abuseConfidenceScore }}</td>
                 </tr>
             {% endfor %}
         </table>
