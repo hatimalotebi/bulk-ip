@@ -80,15 +80,15 @@ def get_cached_ip(ip):
                 virustotal_data = json.loads(row[1]) if row[1] else None
                 otx_data = json.loads(row[2]) if row[2] else None
                 
-                # If we have old-style cached data (single 'data' field), convert it
-                if abuseipdb_data and 'abuseConfidencePercentage' in abuseipdb_data:
+                # If we have old-style cached data, convert it
+                if abuseipdb_data and ('abuseConfidencePercentage' in abuseipdb_data or 'abuseConfidenceScore' in abuseipdb_data):
                     # Convert old format to new format
                     abuseipdb_data = {
                         'ipAddress': abuseipdb_data.get('ipAddress', ip),
                         'isPublic': abuseipdb_data.get('isPublic', False),
                         'ipVersion': abuseipdb_data.get('ipVersion', 4),
                         'isWhitelisted': abuseipdb_data.get('isWhitelisted', False),
-                        'abuseConfidenceScore': abuseipdb_data.get('abuseConfidencePercentage', 0),
+                        'abuseConfidenceScore': abuseipdb_data.get('abuseConfidenceScore', abuseipdb_data.get('abuseConfidencePercentage', 0)),
                         'countryCode': abuseipdb_data.get('countryCode', 'N/A'),
                         'usageType': abuseipdb_data.get('usageType', 'N/A'),
                         'isp': abuseipdb_data.get('isp', 'N/A'),
@@ -475,13 +475,13 @@ def bulk_check(file=None, text=None, api_key=None):
                     )
                     if response.status_code == 200:
                         raw_data = response.json()['data']
-                        # Map the API response to our expected structure
+                        # The API already returns the correct field names, just use them directly
                         data = {
                             'ipAddress': raw_data.get('ipAddress', ip),
                             'isPublic': raw_data.get('isPublic', False),
                             'ipVersion': raw_data.get('ipVersion', 4),
                             'isWhitelisted': raw_data.get('isWhitelisted', False),
-                            'abuseConfidenceScore': raw_data.get('abuseConfidencePercentage', 0),
+                            'abuseConfidenceScore': raw_data.get('abuseConfidenceScore', 0),  # Fixed: use correct field name
                             'countryCode': raw_data.get('countryCode', 'N/A'),
                             'usageType': raw_data.get('usageType', 'N/A'),
                             'isp': raw_data.get('isp', 'N/A'),
