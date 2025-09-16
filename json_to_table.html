@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>أداة حي عينك - JSON to Table Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        .title {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .input-section {
+            margin-bottom: 20px;
+        }
+
+        .input-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .json-input {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            background-color: #f9f9f9;
+        }
+
+        .json-input:focus {
+            outline: none;
+            border-color: #0078D4;
+        }
+
+        .button-section {
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .btn {
+            background-color: #0078D4;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: background-color 0.3s;
+        }
+
+        .btn:hover {
+            background-color: #106EBE;
+        }
+
+        .btn:active {
+            background-color: #005A9E;
+        }
+
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .table-container {
+            margin-top: 20px;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .data-table th {
+            background-color: #007987;
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+
+        .data-table td {
+            background-color: #C9FFFF;
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .data-table tr:hover td {
+            background-color: #B8F5FF;
+        }
+
+        .status {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .success {
+            color: #2e7d32;
+            background-color: #e8f5e8;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">أداة حي عينك - JSON to Table Converter</div>
+        
+        <div class="input-section">
+            <label for="jsonInput" class="input-label">Enter JSON Data:</label>
+            <textarea id="jsonInput" class="json-input" placeholder="Paste your JSON data here..."></textarea>
+        </div>
+        
+        <div class="button-section">
+            <button id="parseBtn" class="btn" onclick="parseJSON()">Parse JSON</button>
+            <button id="copyBtn" class="btn hidden" onclick="copyForExcel()">Copy for Excel</button>
+        </div>
+        
+        <div id="status" class="status">Ready to parse JSON data</div>
+        
+        <div id="tableContainer" class="table-container hidden">
+            <table id="dataTable" class="data-table">
+                <thead id="tableHead"></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <script>
+        let parsedData = [];
+
+        function safeGetNested(obj, path, defaultValue = '') {
+            try {
+                return path.reduce((current, key) => {
+                    if (current && typeof current === 'object' && key in current) {
+                        const value = current[key];
+                        return Array.isArray(value) && value.length > 0 ? value[0] : value;
+                    }
+                    return defaultValue;
+                }, obj) || defaultValue;
+            } catch (e) {
+                return defaultValue;
+            }
+        }
+
+        function parseJSON() {
+            const jsonInput = document.getElementById('jsonInput').value.trim();
+            const status = document.getElementById('status');
+            const tableContainer = document.getElementById('tableContainer');
+            const copyBtn = document.getElementById('copyBtn');
+
+            if (!jsonInput) {
+                showStatus('Please enter JSON data first', 'error');
+                return;
+            }
+
+            try {
+                const data = JSON.parse(jsonInput);
+                
+                if (!Array.isArray(data) || data.length === 0) {
+                    showStatus('JSON should be an array of objects', 'error');
+                    return;
+                }
+
+                // Process data
+                const processedData = data.map(entry => {
+                    const src = entry._source || {};
+                    
+                    return {
+                        'Timestamp': safeGetNested(src, ['timestamp']),
+                        'Severity': safeGetNested(src, ['severity']),
+                        'Risk Score': safeGetNested(src, ['risk_score']),
+                        'Host Name': safeGetNested(src, ['host', 'name']),
+                        'Host OS': safeGetNested(src, ['host', 'os', 'name']),
+                        'Process Name': safeGetNested(src, ['process', 'name']),
+                        'Process Path': safeGetNested(src, ['process', 'executable']),
+                        'Source IP': safeGetNested(src, ['source', 'ip']),
+                        'Source Port': safeGetNested(src, ['source', 'port']),
+                        'Destination IP': safeGetNested(src, ['destination', 'ip']),
+                        'Destination Port': safeGetNested(src, ['destination', 'port']),
+                        'Event Action': safeGetNested(src, ['event', 'action']),
+                        'Event Code': safeGetNested(src, ['event', 'code']),
+                        'Event Type': safeGetNested(src, ['event', 'type']),
+                        'Network Transport': safeGetNested(src, ['network', 'transport']),
+                        'Alert Reason': safeGetNested(src, ['reason'])
+                    };
+                });
+
+                // Remove empty columns
+                const nonEmptyColumns = {};
+                Object.keys(processedData[0]).forEach(key => {
+                    if (processedData.some(row => row[key] && row[key] !== '')) {
+                        nonEmptyColumns[key] = true;
+                    }
+                });
+
+                const filteredData = processedData.map(row => {
+                    const filteredRow = {};
+                    Object.keys(nonEmptyColumns).forEach(key => {
+                        filteredRow[key] = row[key];
+                    });
+                    return filteredRow;
+                });
+
+                parsedData = filteredData;
+                createTable(filteredData);
+                showStatus(`Successfully parsed ${filteredData.length} records with ${Object.keys(filteredData[0]).length} columns`, 'success');
+                
+                tableContainer.classList.remove('hidden');
+                copyBtn.classList.remove('hidden');
+
+            } catch (error) {
+                showStatus('Invalid JSON format: ' + error.message, 'error');
+                tableContainer.classList.add('hidden');
+                copyBtn.classList.add('hidden');
+            }
+        }
+
+        function createTable(data) {
+            if (data.length === 0) return;
+
+            const tableHead = document.getElementById('tableHead');
+            const tableBody = document.getElementById('tableBody');
+
+            // Clear previous content
+            tableHead.innerHTML = '';
+            tableBody.innerHTML = '';
+
+            // Create header
+            const headerRow = document.createElement('tr');
+            Object.keys(data[0]).forEach(key => {
+                const th = document.createElement('th');
+                th.textContent = key;
+                headerRow.appendChild(th);
+            });
+            tableHead.appendChild(headerRow);
+
+            // Create data rows
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                Object.values(row).forEach(value => {
+                    const td = document.createElement('td');
+                    td.textContent = value || '';
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function copyForExcel() {
+            if (parsedData.length === 0) {
+                showStatus('No data to copy', 'error');
+                return;
+            }
+
+            try {
+                // Create styled HTML table for copying
+                const headers = Object.keys(parsedData[0]);
+                
+                let htmlTable = `<table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif;">`;
+                
+                // Header row with styling
+                htmlTable += `<tr>`;
+                headers.forEach(header => {
+                    htmlTable += `<th style="background-color: #007987; color: white; padding: 8px; border: 1px solid #ddd; font-weight: bold;">${header}</th>`;
+                });
+                htmlTable += `</tr>`;
+                
+                // Data rows with styling
+                parsedData.forEach(row => {
+                    htmlTable += `<tr>`;
+                    headers.forEach(header => {
+                        const value = row[header] || '';
+                        htmlTable += `<td style="background-color: #C9FFFF; padding: 6px; border: 1px solid #ddd;">${value}</td>`;
+                    });
+                    htmlTable += `</tr>`;
+                });
+                
+                htmlTable += `</table>`;
+
+                // Copy styled HTML to clipboard
+                if (navigator.clipboard && navigator.clipboard.write) {
+                    // Modern browsers - copy both HTML and text
+                    const clipboardItem = new ClipboardItem({
+                        'text/html': new Blob([htmlTable], { type: 'text/html' }),
+                        'text/plain': new Blob([createPlainText(parsedData)], { type: 'text/plain' })
+                    });
+                    
+                    navigator.clipboard.write([clipboardItem]).then(() => {
+                        showStatus('Styled table copied! You can paste it into Excel, emails, or messages with formatting', 'success');
+                    }).catch(() => {
+                        fallbackCopy(htmlTable);
+                    });
+                } else {
+                    fallbackCopy(htmlTable);
+                }
+
+            } catch (error) {
+                showStatus('Failed to copy data: ' + error.message, 'error');
+            }
+        }
+
+        function createPlainText(data) {
+            const headers = Object.keys(data[0]);
+            const headerRow = headers.join('\t');
+            const dataRows = data.map(row => 
+                headers.map(header => row[header] || '').join('\t')
+            );
+            return [headerRow, ...dataRows].join('\n');
+        }
+
+        function fallbackCopy(htmlTable) {
+            // Fallback method for older browsers
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlTable;
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.left = '-9999px';
+            document.body.appendChild(tempDiv);
+
+            // Select the content
+            const range = document.createRange();
+            range.selectNodeContents(tempDiv);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+
+            try {
+                document.execCommand('copy');
+                showStatus('Styled table copied! You can paste it into Excel, emails, or messages with formatting', 'success');
+            } catch (err) {
+                showStatus('Copy failed. Please select the table manually and copy with Ctrl+C', 'error');
+            }
+
+            document.body.removeChild(tempDiv);
+            selection.removeAllRanges();
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+        }
+
+        // Sample JSON for testing
+        function loadSample() {
+            const sampleJSON = `[{"_id":"sample123","_source":{"timestamp":"2025-09-15T14:29:41.073Z","severity":"medium","risk_score":"47","host":{"name":"test-host","os":{"name":"Windows Server 2022"}},"process":{"name":"test.exe"},"source":{"ip":"192.168.1.1","port":"8080"},"destination":{"ip":"192.168.1.2","port":"443"},"event":{"action":"block","code":"5157"},"reason":"Test alert"}}]`;
+            document.getElementById('jsonInput').value = sampleJSON;
+        }
+    </script>
+</body>
+</html>
