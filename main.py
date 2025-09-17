@@ -38,7 +38,7 @@ optimized_session = create_optimized_session()
 app = Flask(__name__)
 
 # API key for AbuseIPDB
-api_key = "afff296b18e8be5f55036f9910acb04749ea415b10952bef60bd2fe4adff8fe3722bc5de3f8eddcc"
+api_key = "36474dbff173efbdb763dc76a57a57237d569ef6b0d7c2f592bb842c6f3e098536968f53c803db02"
 OTX_API_KEY="491c2539b77d9dbb4c6df06ad467cbc0e8de73064c45148e58a3663042b3902b"
  
 # API key for VirusTotal
